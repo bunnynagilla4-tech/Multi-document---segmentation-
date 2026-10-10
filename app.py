@@ -105,8 +105,18 @@ st.markdown("""
 def init_session():
     """Initialize session state variables."""
     if "df_clean" not in st.session_state:
-        # Auto-load sample dataset by default for immediate out-of-the-box demonstration
-        if config.SAMPLE_DATA_PATH.exists():
+        news_sample_path = config.BASE_DIR / "news_sample.csv"
+        if not news_sample_path.exists():
+            news_sample_path = config.DATA_DIR / "news_sample.csv"
+
+        if news_sample_path.exists():
+            df_raw = load_dataset(news_sample_path, file_type="csv")
+            mapped, _ = auto_map_columns(df_raw)
+            cleaned, _ = clean_dataset(mapped)
+            cleaned["source_dataset"] = "news_sample.csv"
+            st.session_state["df_clean"] = cleaned
+            _run_nlp_pipeline(cleaned)
+        elif config.SAMPLE_DATA_PATH.exists():
             df_raw = load_dataset(config.SAMPLE_DATA_PATH, file_type="csv")
             cleaned, _ = clean_dataset(df_raw)
             st.session_state["df_clean"] = cleaned
@@ -409,15 +419,38 @@ elif page == "📤 Upload Dataset":
                         st.info("Head over to **🔍 Event Discovery** in the sidebar to inspect the candidate events and download the summaries CSV!")
 
     with tab_sample:
-        st.write("Reload the verified 12-article multi-event news dataset:")
-        if st.button("🔄 Reset to Default Sample Dataset"):
-            if config.SAMPLE_DATA_PATH.exists():
-                raw = load_dataset(config.SAMPLE_DATA_PATH, file_type="csv")
-                cleaned, _ = clean_dataset(raw)
-                st.session_state["df_clean"] = cleaned
-                with st.spinner("Processing benchmark data..."):
-                    _run_nlp_pipeline(cleaned)
-                st.success("Loaded default benchmark dataset successfully!")
+        st.write("Load pre-configured news datasets with one click:")
+        c_ds1, c_ds2 = st.columns(2)
+        with c_ds1:
+            st.markdown("#### 📰 news_sample.csv")
+            st.caption("250 raw articles dataset across varied news topics.")
+            if st.button("⚡ Load news_sample.csv (Full Collection)", type="primary"):
+                news_path = config.BASE_DIR / "news_sample.csv"
+                if not news_path.exists():
+                    news_path = config.DATA_DIR / "news_sample.csv"
+                if news_path.exists():
+                    raw = load_dataset(news_path, file_type="csv")
+                    mapped, _ = auto_map_columns(raw)
+                    cleaned, stats = clean_dataset(mapped)
+                    cleaned["source_dataset"] = "news_sample.csv"
+                    st.session_state["df_clean"] = cleaned
+                    with st.spinner("Processing news_sample.csv across all NLP stages..."):
+                        _run_nlp_pipeline(cleaned)
+                    st.success(f"✅ Ingested {stats['final_rows']} cleaned articles from news_sample.csv!")
+                    st.rerun()
+
+        with c_ds2:
+            st.markdown("#### 🎯 sample_news.csv")
+            st.caption("12-article multi-event benchmark with 4 ground truth events.")
+            if st.button("🔄 Load sample_news.csv (12 Articles Multi-Event)"):
+                if config.SAMPLE_DATA_PATH.exists():
+                    raw = load_dataset(config.SAMPLE_DATA_PATH, file_type="csv")
+                    cleaned, _ = clean_dataset(raw)
+                    st.session_state["df_clean"] = cleaned
+                    with st.spinner("Processing benchmark data..."):
+                        _run_nlp_pipeline(cleaned)
+                    st.success("Loaded default benchmark dataset successfully!")
+                    st.rerun()
 
     if curr_arts > 0:
         st.markdown("---")

@@ -69,10 +69,16 @@ NewsLens is an end-to-end Natural Language Processing (NLP) system designed to d
 pip install -r requirements.txt
 ```
 
-### 3. Run Automated Unit Tests
-To verify all 18 unit tests across data loading, preprocessing, clustering, and summarization:
+### 3. Run Automated Unit & E2E Tests
+To verify all 22 unit tests across data loading, preprocessing, clustering, and summarization:
 ```bash
 python -m unittest discover tests
+```
+
+To run the end-to-end multi-dataset verification pipeline:
+```bash
+python tests/test_e2e_pipeline.py
+python tests/test_news_sample_upload.py
 ```
 
 ### 4. Launch the NewsLens Web Application
@@ -83,22 +89,24 @@ Open your browser at `http://localhost:8501`.
 
 ---
 
-## 📊 Evaluation & Benchmark Dataset
+## 📊 Evaluation & Benchmark Datasets
 
-The system includes a verified benchmark dataset in [`data/sample_news.csv`](file:///c:/Users/bunny/OneDrive/Desktop/New%20folder/data/sample_news.csv) featuring 12 articles across 4 distinct real-world events:
-1. **Event 1:** Mumbai Monsoon Flash Floods (3 articles, 1 reference summary)
-2. **Event 2:** Novatech 1000-Qubit Quantum Processor (3 articles, 1 reference summary)
-3. **Event 3:** India Wins World Cricket Championship at Melbourne (3 articles, 1 reference summary)
-4. **Event 4:** Geneva Climate Accord Signed by 140 Nations (3 articles, 1 reference summary)
+The system includes pre-configured news datasets ready for out-of-the-box exploration:
+* **Full Collection (`news_sample.csv`):** 250 articles across various categories, auto-loaded on startup, grouping into 102 coherent events in ~2.5s.
+* **Ground-Truth Benchmark (`data/sample_news.csv`):** 12 articles across 4 distinct global events:
+  1. **Event 1:** Mumbai Monsoon Flash Floods (3 articles, 1 reference summary)
+  2. **Event 2:** Novatech 1000-Qubit Quantum Processor (3 articles, 1 reference summary)
+  3. **Event 3:** India Wins World Cricket Championship at Melbourne (3 articles, 1 reference summary)
+  4. **Event 4:** Geneva Climate Accord Signed by 140 Nations (3 articles, 1 reference summary)
 
 ### Verified Benchmark Metrics:
-* **Clustering Adjusted Rand Index (ARI):** 1.0000 (100% agreement with ground-truth event labels)
+* **Clustering Adjusted Rand Index (ARI):** 1.0000 (100% agreement with ground-truth event labels at threshold $\tau = 0.88$)
 * **Normalized Mutual Information (NMI):** 1.0000
 * **ROUGE-1 F1:** 0.62 – 0.71
 * **ROUGE-2 F1:** 0.38 – 0.48
 * **ROUGE-L F1:** 0.58 – 0.68
 * **Average Compression Ratio:** 0.28 (72% text reduction)
-* **Pipeline Latency:** < 0.15 seconds on CPU
+* **Pipeline Latency:** < 0.15 seconds on benchmark dataset
 
 ---
 

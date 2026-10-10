@@ -36,7 +36,7 @@
 ### Slide 6: Event Clustering Strategy
 * Semantic representation via TF-IDF vectors.
 * Cosine Distance Matrix calculation with zero diagonals.
-* Agglomerative Hierarchical Clustering with average linkage and tunable distance threshold (\( \tau = 0.75 \)).
+* Agglomerative Hierarchical Clustering with average linkage and tunable distance threshold (\( \tau = 0.88 \)).
 * Solves the cross-article grouping problem without requiring prior cluster count.
 
 ### Slide 7: Summarization Paradigms
@@ -83,7 +83,7 @@
 **Answer:** TF-IDF provides an interpretable, mathematically transparent, and computationally lightweight representation that runs instantaneously on CPU without gigabytes of model weight downloads. It performs exceptionally well for news event clustering because events are characterized by distinctive proper nouns, dates, and topical vocabulary.
 
 ### Q3: How does your clustering algorithm determine the number of events without hardcoding K?
-**Answer:** We use Agglomerative Hierarchical Clustering with a distance threshold (`distance_threshold=0.75`) and `n_clusters=None`. Instead of forcing a predetermined number of clusters like K-Means, it merges articles bottom-up until the average cosine distance between clusters exceeds the threshold.
+**Answer:** We use Agglomerative Hierarchical Clustering with a distance threshold (`distance_threshold=0.88`) and `n_clusters=None`. Instead of forcing a predetermined number of clusters like K-Means, it merges articles bottom-up until the average cosine distance between clusters exceeds the threshold.
 
 ### Q4: What is Maximal Marginal Relevance (MMR)?
 **Answer:** MMR is an algorithm that balances relevance and diversity. When picking candidate sentences for an extractive summary, MMR scores each sentence by its similarity to the overall event centroid minus a weighted penalty for its similarity to already selected sentences. This prevents the summary from containing repetitive sentences.

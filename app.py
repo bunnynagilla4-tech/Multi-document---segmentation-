@@ -313,18 +313,35 @@ elif page == "📤 Upload Dataset":
                         if selected_title == selected_text:
                             st.error("Title column and Text column cannot be the same! Please map different columns.")
                         else:
-                            mapped_df = raw_df.copy()
-                            rename_dict = {
-                                selected_title: "title",
-                                selected_text: "text"
-                            }
-                            if selected_source != "(None - Auto assign)":
-                                rename_dict[selected_source] = "source"
-                            if selected_date != "(None - Auto assign)":
-                                rename_dict[selected_date] = "published_date"
+                            title_col_data = raw_df[selected_title]
+                            if isinstance(title_col_data, pd.DataFrame):
+                                title_col_data = title_col_data.iloc[:, 0]
 
-                            mapped_df = mapped_df.rename(columns=rename_dict)
+                            text_col_data = raw_df[selected_text]
+                            if isinstance(text_col_data, pd.DataFrame):
+                                text_col_data = text_col_data.iloc[:, 0]
+
+                            new_data = {
+                                "title": title_col_data,
+                                "text": text_col_data
+                            }
+
+                            if selected_source != "(None - Auto assign)" and selected_source in raw_df.columns:
+                                src_data = raw_df[selected_source]
+                                new_data["source"] = src_data.iloc[:, 0] if isinstance(src_data, pd.DataFrame) else src_data
+
+                            if selected_date != "(None - Auto assign)" and selected_date in raw_df.columns:
+                                date_data = raw_df[selected_date]
+                                new_data["published_date"] = date_data.iloc[:, 0] if isinstance(date_data, pd.DataFrame) else date_data
+
+                            mapped_df = pd.DataFrame(new_data)
                             mapped_df["source_dataset"] = uploaded_file.name
+
+                            # Carry over any optional article_id, event_id, or reference_summary if present
+                            for opt_col in ["article_id", "event_id", "reference_summary"]:
+                                if opt_col in raw_df.columns and opt_col not in [selected_title, selected_text]:
+                                    opt_data = raw_df[opt_col]
+                                    mapped_df[opt_col] = opt_data.iloc[:, 0] if isinstance(opt_data, pd.DataFrame) else opt_data
 
                             is_valid, errors = validate_dataset(mapped_df)
                             if not is_valid:

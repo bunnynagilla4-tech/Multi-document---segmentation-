@@ -52,19 +52,25 @@ def auto_map_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
         return df, {}
 
     df_copy = df.copy()
+    if df_copy.columns.duplicated().any():
+        df_copy = df_copy.loc[:, ~df_copy.columns.duplicated()].copy()
+
     col_map = {}
     lower_cols = {str(col).lower().strip(): col for col in df_copy.columns}
 
     for standard_col, synonyms in COLUMN_SYNONYMS.items():
         if standard_col not in df_copy.columns:
             for syn in synonyms:
-                if syn in lower_cols:
+                if syn in lower_cols and lower_cols[syn] not in col_map:
                     original_name = lower_cols[syn]
                     col_map[original_name] = standard_col
                     break
 
     if col_map:
         df_copy = df_copy.rename(columns=col_map)
+        if df_copy.columns.duplicated().any():
+            df_copy = df_copy.loc[:, ~df_copy.columns.duplicated()].copy()
+
     return df_copy, col_map
 
 
@@ -113,9 +119,20 @@ def clean_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     # Work on a copy
     cleaned = df.copy()
 
-    # Ensure required columns are string types
-    cleaned["title"] = cleaned["title"].astype(str).str.strip()
-    cleaned["text"] = cleaned["text"].astype(str).str.strip()
+    # Deduplicate column names if any exist (e.g. multiple 'text' or 'title' columns)
+    if cleaned.columns.duplicated().any():
+        cleaned = cleaned.loc[:, ~cleaned.columns.duplicated()].copy()
+
+    # Ensure required columns are 1D Series (not DataFrame) and string types
+    title_series = cleaned["title"]
+    if isinstance(title_series, pd.DataFrame):
+        title_series = title_series.iloc[:, 0]
+    cleaned["title"] = title_series.astype(str).str.strip()
+
+    text_series = cleaned["text"]
+    if isinstance(text_series, pd.DataFrame):
+        text_series = text_series.iloc[:, 0]
+    cleaned["text"] = text_series.astype(str).str.strip()
 
     # Filter out empty or 'nan' string entries
     valid_mask = (

@@ -120,7 +120,21 @@ class TestDataLoader(unittest.TestCase):
         self.assertEqual(len(combined), 1)
         self.assertEqual(stats["valid_files"], 1)
 
+    def test_clean_dataset_with_duplicate_column_names(self):
+        """Test that duplicate 'text' or 'title' columns are deduplicated and do not crash with 'DataFrame' has no attribute 'str'."""
+        # Create a dataframe with duplicate column names
+        df_dup = pd.DataFrame([["Title 1", "Text Body 1", "Duplicate Text 1"]], columns=["title", "text", "text"])
+        self.assertTrue(df_dup.columns.duplicated().any())
+
+        # clean_dataset must cleanly process without crashing
+        cleaned, stats = clean_dataset(df_dup)
+        self.assertEqual(len(cleaned), 1)
+        self.assertFalse(cleaned.columns.duplicated().any())
+        self.assertEqual(cleaned["title"].iloc[0], "Title 1")
+        self.assertEqual(cleaned["text"].iloc[0], "Text Body 1")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -1,0 +1,583 @@
+
+# MASTER AUTOMATION PROMPT — COMPLETE NEWSLENS PROJECT
+
+## 1. Your Role
+
+Act as a senior AI/ML engineer, NLP researcher, full-stack web developer, UI/UX designer, software tester, and technical documentation specialist.
+
+Your task is to plan, develop, test, and document a complete, working college project titled:
+
+**“Multi-Document Summarization for News Events Using Natural Language Processing”**
+
+The application name is **NewsLens**.
+
+Do not merely provide explanations or sample snippets. Build a functional, integrated project with a clear folder structure, complete source code, installation instructions, testing procedures, documentation, and deployment guidance.
+
+The user is a beginner. Explain technical steps clearly, avoid unnecessary installations, and guide them through the process in manageable stages.
+
+## 2. Project Idea
+
+Online news about the same event is published by multiple news sources. These articles may repeat facts, use different wording, emphasize different details, or contain overlapping information.
+
+Reading every article individually takes time and can make it difficult to identify the most important facts.
+
+NewsLens should accept multiple news articles, identify related articles, group them into candidate news events, and generate a concise summary that combines useful information from the articles.
+
+The system should help users understand:
+
+* What happened?
+* Who was involved?
+* Where did the event occur?
+* When did it occur?
+* What are the most important facts?
+* What information is repeated across articles?
+* What additional details do different articles contribute?
+
+The system must not invent facts or treat uncertain information as confirmed.
+
+## 3. Project Objectives
+
+1. Collect or import news articles from a dataset.
+2. Clean and preprocess news text.
+3. Tokenize text and remove stopwords where appropriate.
+4. Extract meaningful keywords and named entities.
+5. Identify topics using NLP topic-modeling techniques.
+6. Calculate similarity between articles.
+7. Cluster related articles into candidate events.
+8. Generate extractive summaries.
+9. Generate abstractive summaries using a pretrained language model.
+10. Develop a hybrid summary that combines complementary sentences or facts.
+11. Evaluate summarization and clustering performance.
+12. Build a responsive web application with an accessible user interface.
+13. Allow users to upload news datasets and inspect results.
+14. Provide clear documentation, testing instructions, and a project presentation.
+
+## 4. Recommended Technology Stack
+
+Use a beginner-friendly, maintainable stack.
+
+### Programming and NLP
+
+* Python
+* pandas and NumPy
+* scikit-learn
+* NLTK or spaCy for text processing
+* TF-IDF for text representation
+* Cosine similarity for document similarity
+* NMF or LDA for topic modeling
+* Agglomerative clustering or another justified clustering method
+* A compatible pretrained transformer model for abstractive summarization
+* ROUGE for summary evaluation
+* BLEU only where appropriate, with its limitations explained
+
+### Web application
+
+* Streamlit for the first complete working website
+* Plotly or Matplotlib for visualizations
+* pandas for displaying and exporting results
+
+### Development environment
+
+* Google Colab for experimentation and model testing
+* A local Python environment or hosted application platform for running the website
+* Git and GitHub for version control, if available
+
+Do not require a database, paid API, GPU, or external API key unless it is genuinely needed. Prefer pretrained open-source models and provide CPU-compatible alternatives.
+
+Keep the NLP logic separate from the web interface so the same pipeline can run in notebooks, automated tests, and the website.
+
+## 5. Dataset Requirements
+
+Design the application to support:
+
+* CSV uploads
+* JSON uploads where practical
+* A small built-in sample dataset
+* A larger real-world news dataset
+
+Use these recommended dataset fields:
+
+* `article_id`
+* `title`
+* `text`
+* `source`
+* `published_date`
+* `url`
+* `event_id` (optional reference label for evaluation)
+
+The minimum required input fields should be `title` and `text`. Other fields must be optional.
+
+Target approximately 50,000 articles for the intended larger-scale project, but do not fabricate a 50,000-article dataset or claim that a small sample demonstrates large-scale performance.
+
+Begin development with 5–20 sample articles, then test with larger subsets before attempting the full dataset.
+
+Include:
+
+* Dataset loading and validation
+* Missing-value handling
+* Duplicate detection
+* Empty-article filtering
+* Encoding handling
+* Error messages for invalid uploads
+* A sample dataset that makes it easy to demonstrate the application
+
+Document dataset source, licensing, limitations, and any required attribution.
+
+## 6. Text Preprocessing Pipeline
+
+Implement reusable functions for:
+
+1. Text normalization.
+2. Removal of unwanted HTML and URLs where appropriate.
+3. Whitespace and punctuation cleanup.
+4. Tokenization.
+5. Stopword removal where appropriate.
+6. Optional lemmatization.
+7. Named entity recognition.
+8. Preservation of original text for display and traceability.
+
+Do not delete information that could be important to the event, such as dates, amounts, locations, names, or negations.
+
+Store processed text separately from original text.
+
+Make each processing stage testable and document its purpose.
+
+## 7. Topic Modeling
+
+Implement at least one topic-modeling method, preferably NMF with TF-IDF as a simple baseline.
+
+Optionally provide LDA as a comparison.
+
+Requirements:
+
+* Allow the number of topics to be configured.
+* Display representative keywords for each topic.
+* Assign an estimated topic to each article where appropriate.
+* Visualize topic distributions.
+* Explain that unsupervised topics are approximate and may not correspond perfectly to real-world events.
+
+Avoid promising that topic modeling alone will correctly identify news events.
+
+## 8. Article Similarity and Event Clustering
+
+Implement a similarity pipeline using TF-IDF and cosine similarity as the initial baseline.
+
+Requirements:
+
+* Calculate article similarity.
+* Find the most similar articles.
+* Support a configurable similarity threshold.
+* Cluster articles into candidate event groups.
+* Display the titles and article counts for each group.
+* Allow users to inspect articles within a group.
+* Provide a way to review or adjust cluster assignments where feasible.
+* Explain that semantically related articles can still describe different events.
+
+For larger datasets, do not construct an enormous dense article-by-article similarity matrix by default. Use sparse matrices, nearest-neighbor retrieval, batching, or another scalable method.
+
+Benchmark performance on representative dataset sizes.
+
+If the baseline clustering separates articles that clearly describe the same event, diagnose and tune the approach rather than claiming perfect clustering.
+
+## 9. Summarization Methods
+
+### A. Extractive summarization
+
+Create a method that selects important sentences from the input articles.
+
+Requirements:
+
+* Score sentence importance using a documented method.
+* Reduce unnecessary repeated sentences.
+* Preserve original wording.
+* Return a configurable summary length.
+* Track which article and sentence each selected sentence came from.
+* Avoid duplicate sentences in the final result.
+
+### B. Abstractive summarization
+
+Use a compatible pretrained summarization model.
+
+Requirements:
+
+* Provide model-loading code with version-compatible dependencies.
+* Handle model download failures and unsupported model configurations.
+* Use reasonable input-length limits.
+* Split long articles or article groups into chunks when required.
+* Combine intermediate summaries carefully.
+* Avoid claiming that generated details are factually verified.
+* Display a useful message if the model cannot load.
+* Include a smaller or extractive fallback for machines with limited resources.
+
+Never assume a particular Hugging Face pipeline task or model works without testing it in the selected environment.
+
+### C. Hybrid summarization
+
+Combine extractive and abstractive approaches.
+
+The hybrid approach should:
+
+* Identify important information from multiple articles.
+* Reduce repeated content.
+* Generate a readable summary.
+* Preserve traceability to source articles.
+* Make it possible for a user to inspect supporting source passages.
+* Avoid adding unsupported facts.
+
+Do not simply concatenate multiple summaries and call the result hybrid. Implement and document a meaningful combination strategy.
+
+### D. Summary comparison
+
+Let users compare:
+
+* Original article text
+* Extractive summary
+* Abstractive summary
+* Hybrid summary
+
+Show word counts and compression ratios where useful.
+
+## 10. Evaluation and Metrics
+
+Implement evaluation that is appropriate for each task.
+
+### Summarization evaluation
+
+* ROUGE-1
+* ROUGE-2
+* ROUGE-L
+* Optional BLEU
+* Summary length and compression ratio
+* Human assessment of factual accuracy, readability, relevance, and redundancy
+
+ROUGE and BLEU must not be presented as proof of factual correctness.
+
+When reference summaries are available, calculate the selected automatic metrics against those references.
+
+If reference summaries are unavailable, do not invent evaluation scores. Explain that reference-based metrics cannot be calculated meaningfully without suitable references.
+
+### Clustering evaluation
+
+When ground-truth event labels are available, calculate suitable metrics such as:
+
+* Adjusted Rand Index
+* Normalized Mutual Information
+* Silhouette score when its assumptions and input representation are appropriate
+
+Explain that different metrics measure different properties and that unsupervised clustering has no guaranteed correct answer.
+
+### Performance evaluation
+
+Record:
+
+* Number of articles processed
+* Processing time
+* Summarization time
+* Model used
+* Hardware or runtime environment
+* Errors and skipped records
+
+Generate charts and a results table.
+
+Clearly label sample results, measured experimental results, and illustrative examples.
+
+## 11. Website Requirements
+
+Build a polished, responsive Streamlit website called NewsLens.
+
+Use a professional news-analysis visual style, readable typography, clear spacing, accessible contrast, and consistent components.
+
+### Page 1: Home Dashboard
+
+Include:
+
+* Project name and short description
+* Overview of the processing pipeline
+* Article count
+* Candidate event-group count
+* Available summarization methods
+* Quick-start instructions
+* A clearly labeled sample-data demonstration
+
+### Page 2: Upload Dataset
+
+Include:
+
+* CSV/JSON upload support where implemented
+* Dataset preview
+* Column selection or mapping
+* Validation messages
+* Missing-value and duplicate statistics
+* A button to start processing
+
+### Page 3: Preprocessing
+
+Show:
+
+* Original article
+* Cleaned article
+* Tokens
+* Optional named entities
+* Processing statistics
+
+### Page 4: Topic Analysis
+
+Show:
+
+* Topics and representative keywords
+* Topic distribution charts
+* Article-to-topic assignments where available
+
+### Page 5: Event Discovery
+
+Show:
+
+* Candidate event groups
+* Article titles within each group
+* Similarity information
+* Group size
+* Search and filtering
+* Source and date information when available
+
+### Page 6: Summarization Studio
+
+Allow the user to:
+
+* Select one candidate event group or multiple articles
+* Choose extractive, abstractive, or hybrid summarization
+* Configure summary length where supported
+* Generate a summary
+* Compare the output methods
+* Inspect supporting source articles
+* Copy or download results
+
+### Page 7: Evaluation
+
+Show:
+
+* Available evaluation metrics
+* Reference-summary requirements
+* Metric charts and tables
+* Runtime statistics
+* Warnings about unsupported or unavailable measurements
+
+### Page 8: About and Methodology
+
+Document:
+
+* Project motivation
+* Objectives
+* Architecture
+* Algorithms
+* Model details
+* Dataset details
+* Limitations
+* Ethical considerations
+* References
+
+Do not add decorative controls that do nothing. Every button, upload field, filter, and download action must work or be clearly marked as unavailable.
+
+## 12. Suggested Project Structure
+
+Create a maintainable project similar to:
+
+```text
+NewsLens/
+├── app.py
+├── requirements.txt
+├── README.md
+├── config.py
+├── data/
+│   ├── sample_news.csv
+│   └── README.md
+├── src/
+│   ├── data_loader.py
+│   ├── preprocessing.py
+│   ├── topic_modeling.py
+│   ├── similarity.py
+│   ├── event_clustering.py
+│   ├── extractive_summarizer.py
+│   ├── abstractive_summarizer.py
+│   ├── hybrid_summarizer.py
+│   └── evaluation.py
+├── tests/
+│   ├── test_data_loader.py
+│   ├── test_preprocessing.py
+│   ├── test_clustering.py
+│   └── test_summarization.py
+├── notebooks/
+│   └── news_pipeline_experiment.ipynb
+├── docs/
+│   ├── project_report.md
+│   ├── architecture.md
+│   └── presentation_outline.md
+└── .gitignore
+```
+
+You may adjust this structure if a simpler design is better for the initial working version, but explain any major changes.
+
+## 13. Software Engineering Requirements
+
+* Use clear function names and type hints where helpful.
+* Keep configuration separate from core algorithms.
+* Use logging and meaningful error handling.
+* Validate user input.
+* Avoid hard-coded absolute file paths.
+* Never commit private credentials or access tokens.
+* Keep original articles available for verification.
+* Include dependency versions known to work together.
+* Provide CPU fallback behavior.
+* Cache expensive model loading when appropriate.
+* Avoid reloading large models for every button click.
+* Add tests for important processing functions.
+* Keep generated files and temporary uploads manageable.
+* Avoid processing an entire large dataset synchronously in the browser request if it would make the interface unresponsive.
+
+## 14. Testing Requirements
+
+Create tests for:
+
+* Valid dataset upload
+* Missing title or text fields
+* Empty articles
+* Duplicate articles
+* Text cleaning
+* Tokenization
+* Similarity calculations
+* Event clustering
+* Extractive summaries
+* Abstractive-model failure handling
+* Hybrid-summary generation
+* Evaluation with and without reference summaries
+* Downloading result files
+
+Test the complete pipeline on the sample dataset before attempting a large dataset.
+
+Include expected outputs for small deterministic tests, but do not fabricate test results.
+
+## 15. Documentation and College Submission
+
+Generate a complete project report outline or report containing:
+
+1. Title page
+2. Abstract
+3. Introduction
+4. Problem statement
+5. Motivation
+6. Objectives
+7. Existing-system overview
+8. Proposed system
+9. System architecture
+10. Functional and non-functional requirements
+11. Dataset description
+12. Methodology
+13. Algorithms
+14. Implementation details
+15. User-interface screenshots to be captured from the actual application
+16. Experimental setup
+17. Actual results and evaluation
+18. Limitations
+19. Future enhancements
+20. Conclusion
+21. References
+
+Also prepare:
+
+* A presentation outline for a college project demonstration
+* A concise project abstract
+* A problem statement
+* Project objectives
+* A software requirements specification
+* A testing checklist
+* Instructions for demonstrating the project
+* Frequently asked viva questions and answers
+
+Use placeholders for student name, roll number, guide, academic year, and other information that has not been provided.
+
+Never fabricate experimental results, citations, screenshots, implementation status, or faculty approval.
+
+## 16. Execution and Deployment
+
+Provide clear beginner-friendly instructions for:
+
+* Opening the project
+* Installing dependencies
+* Running tests
+* Starting the Streamlit application
+* Uploading the sample dataset
+* Running the full pipeline
+* Downloading summaries and evaluation results
+* Troubleshooting dependency and model-download errors
+* Deploying the application on a suitable hosting platform
+
+Google Colab can be used for notebook experimentation, but explain that a persistent, shareable Streamlit deployment normally needs a separate deployment setup.
+
+Provide a lightweight mode for machines with limited RAM and no GPU.
+
+## 17. Automation and Work Sequence
+
+Build the project in the following order:
+
+Phase 1 — Requirements and architecture
+Phase 2 — Dataset and sample-data creation
+Phase 3 — Preprocessing pipeline
+Phase 4 — Topic modeling
+Phase 5 — Similarity and event clustering
+Phase 6 — Extractive summarization
+Phase 7 — Abstractive summarization
+Phase 8 — Hybrid summarization
+Phase 9 — Evaluation
+Phase 10 — Streamlit interface
+Phase 11 — Integration and testing
+Phase 12 — Documentation and presentation
+Phase 13 — Deployment
+
+At the end of each phase:
+
+* List files created or modified.
+* Explain what is implemented.
+* Run relevant tests.
+* Report actual errors and results.
+* Provide the exact next command or action.
+* Wait for confirmation if an action requires user interaction.
+
+If you have access to tools that can create and edit project files, use them to create the actual files. If you do not, provide complete file contents and explicit file paths rather than claiming that files were created.
+
+Do not give the beginner dozens of unrelated actions at once. Work incrementally and preserve completed work.
+
+## 18. Definition of Done
+
+The project is complete only when:
+
+* The sample dataset loads correctly.
+* Preprocessing runs successfully.
+* Topic modeling produces inspectable output.
+* Related-article similarity and clustering work.
+* Extractive summarization works.
+* Abstractive summarization works in the chosen environment or has a clearly explained fallback.
+* Hybrid summarization is implemented.
+* Evaluation uses valid inputs and reports meaningful limitations.
+* The Streamlit application runs.
+* Users can upload data and inspect results.
+* Summaries and supported result tables can be downloaded.
+* Core tests pass.
+* Setup instructions are reproducible.
+* Documentation matches the actual implementation.
+* No experimental result or capability is falsely claimed.
+
+## 19. First Action
+
+Do not immediately dump the entire codebase in one huge response.
+
+First, present:
+
+1. The finalized project idea.
+2. The system architecture.
+3. The planned folder structure.
+4. The minimum working version.
+5. The exact development sequence.
+6. The most important risks and how they will be handled.
+
+Then begin implementation with the smallest complete, testable milestone.
+
+Prioritize a working, reliable project over unnecessary complexity or visual decoration.

@@ -1,0 +1,140 @@
+"""Data loader and validation module for NewsLens.
+Handles reading CSV/JSON datasets, validation, missing value cleaning,
+and duplicate detection.
+"""
+
+from pathlib import Path
+from typing import Tuple, Dict, Any, Union, BinaryIO, TextIO
+import io
+import pandas as pd
+import config
+
+
+def load_dataset(
+    source: Union[str, Path, BinaryIO, TextIO],
+    file_type: str = "csv"
+) -> pd.DataFrame:
+    """Load news dataset from a file path or file buffer.
+
+    Supports CSV and JSON formats with automatic fallback encoding detection.
+    """
+    if file_type == "csv":
+        try:
+            df = pd.read_csv(source, encoding="utf-8")
+        except UnicodeDecodeError:
+            if hasattr(source, "seek"):
+                source.seek(0)
+            df = pd.read_csv(source, encoding="latin-1")
+    elif file_type == "json":
+        df = pd.read_json(source)
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}. Expected 'csv' or 'json'.")
+
+    return df
+
+
+def validate_dataset(df: pd.DataFrame) -> Tuple[bool, list]:
+    """Validate that the dataset contains mandatory columns and is non-empty.
+
+    Returns:
+        (is_valid, list_of_error_or_warning_messages)
+    """
+    errors = []
+
+    if df is None or df.empty:
+        errors.append("Dataset is completely empty.")
+        return False, errors
+
+    missing_cols = [col for col in config.REQUIRED_COLUMNS if col not in df.columns]
+    if missing_cols:
+        errors.append(
+            f"Missing required columns: {missing_cols}. Dataset must include {config.REQUIRED_COLUMNS}."
+        )
+        return False, errors
+
+    return True, errors
+
+
+def clean_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Clean the raw news dataset.
+
+    - Strips whitespace from text and title.
+    - Filters out missing or empty titles/texts.
+    - Drops duplicate articles.
+    - Generates synthetic article_id if not present.
+    - Standardizes optional fields.
+
+    Returns:
+        (cleaned_dataframe, statistics_dict)
+    """
+    initial_count = len(df)
+    stats = {
+        "initial_rows": initial_count,
+        "missing_filtered": 0,
+        "duplicates_removed": 0,
+        "final_rows": 0,
+    }
+
+    # Work on a copy
+    cleaned = df.copy()
+
+    # Ensure required columns are string types
+    cleaned["title"] = cleaned["title"].astype(str).str.strip()
+    cleaned["text"] = cleaned["text"].astype(str).str.strip()
+
+    # Filter out empty or 'nan' string entries
+    valid_mask = (
+        (cleaned["title"] != "") &
+        (cleaned["title"].str.lower() != "nan") &
+        (cleaned["text"] != "") &
+        (cleaned["text"].str.lower() != "nan")
+    )
+    missing_count = initial_count - valid_mask.sum()
+    stats["missing_filtered"] = int(missing_count)
+    cleaned = cleaned[valid_mask].copy()
+
+    # Drop duplicate articles based on text content
+    before_dedup = len(cleaned)
+    cleaned = cleaned.drop_duplicates(subset=["text"], keep="first").reset_index(drop=True)
+    duplicates_count = before_dedup - len(cleaned)
+    stats["duplicates_removed"] = int(duplicates_count)
+
+    # Ensure article_id exists
+    if "article_id" not in cleaned.columns:
+        cleaned["article_id"] = [f"art_{i+1:03d}" for i in range(len(cleaned))]
+
+    # Ensure other optional columns are present with sensible defaults
+    if "source" not in cleaned.columns:
+        cleaned["source"] = "Unknown Source"
+    else:
+        cleaned["source"] = cleaned["source"].fillna("Unknown Source")
+
+    if "published_date" not in cleaned.columns:
+        cleaned["published_date"] = "Unknown Date"
+    else:
+        cleaned["published_date"] = cleaned["published_date"].fillna("Unknown Date")
+
+    stats["final_rows"] = len(cleaned)
+    return cleaned, stats
+
+
+def get_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:
+    """Calculate summary statistics for a cleaned news dataframe."""
+    if df.empty:
+        return {
+            "total_articles": 0,
+            "avg_word_count": 0,
+            "sources_count": 0,
+            "has_event_labels": False
+        }
+
+    word_counts = df["text"].apply(lambda t: len(str(t).split()))
+
+    return {
+        "total_articles": len(df),
+        "avg_word_count": round(float(word_counts.mean()), 1),
+        "min_word_count": int(word_counts.min()),
+        "max_word_count": int(word_counts.max()),
+        "unique_sources": int(df["source"].nunique()) if "source" in df.columns else 1,
+        "has_event_labels": "event_id" in df.columns and df["event_id"].notna().any()
+    }

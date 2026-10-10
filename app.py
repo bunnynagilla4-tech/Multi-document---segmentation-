@@ -262,16 +262,24 @@ elif page == "📤 Upload Dataset":
 
                     all_cols = list(raw_df.columns)
 
-                    # Intelligent default detection helper
+                    # Intelligent default detection helper (exact match first, then substring match excluding index/unnamed columns)
                     def find_default_col(candidates, default_val=0):
-                        for idx, c in enumerate(all_cols):
-                            c_lower = str(c).lower().strip()
-                            if any(cand in c_lower for cand in candidates):
-                                return idx
+                        for cand in candidates:
+                            for idx, c in enumerate(all_cols):
+                                c_lower = str(c).lower().strip()
+                                if c_lower == cand:
+                                    return idx
+                        for cand in candidates:
+                            for idx, c in enumerate(all_cols):
+                                c_lower = str(c).lower().strip()
+                                if "unnamed" in c_lower or c_lower in ["id", "index"]:
+                                    continue
+                                if cand in c_lower:
+                                    return idx
                         return default_val
 
-                    default_title_idx = find_default_col(["title", "headline", "heading", "name"], 0)
-                    default_text_idx = find_default_col(["text", "content", "body", "article", "story", "description", "news"], min(1, len(all_cols) - 1))
+                    default_title_idx = find_default_col(["title", "headline", "headlines", "heading", "name", "subject", "article_title"], 0)
+                    default_text_idx = find_default_col(["text", "content", "body", "article", "story", "description", "news", "articles", "full_text"], min(1, len(all_cols) - 1))
 
                     c_map1, c_map2 = st.columns(2)
                     with c_map1:
@@ -291,8 +299,8 @@ elif page == "📤 Upload Dataset":
 
                     c_map3, c_map4 = st.columns(2)
                     optional_col_choices = ["(None - Auto assign)"] + all_cols
-                    default_src_idx = find_default_col(["source", "publisher", "outlet", "author"], -1) + 1
-                    default_date_idx = find_default_col(["date", "time", "timestamp"], -1) + 1
+                    default_src_idx = find_default_col(["source", "domain", "publisher", "publication", "outlet", "author", "agency", "site"], -1) + 1
+                    default_date_idx = find_default_col(["published_date", "date", "time", "timestamp", "datetime", "pub_date", "scraped_at", "inserted_at"], -1) + 1
 
                     with c_map3:
                         selected_source = st.selectbox(
@@ -564,7 +572,7 @@ elif page == "🔍 Event Discovery":
         st.markdown("---")
         st.write(f"Displaying **{len(clusters)}** candidate news events discovered across all ingested articles:")
 
-        for c in clusters:
+        for idx, c in enumerate(clusters):
             # Badges
             badges_html = ""
             if c.get("is_cross_dataset"):
@@ -575,7 +583,8 @@ elif page == "🔍 Event Discovery":
                 badges_html += "<span style='background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;'>✅ Coherent Event</span>"
 
             exp_label = f"📌 Event {c['event_id']}: {c['representative_title']} ({c['article_count']} articles)"
-            with st.expander(exp_label, expanded=True):
+            should_expand = (idx < 5) if len(clusters) > 8 else True
+            with st.expander(exp_label, expanded=should_expand):
                 st.markdown(f"**Event Status:** {badges_html}", unsafe_allow_html=True)
                 if c.get("cohesion_note"):
                     if c.get("is_unrelated"):

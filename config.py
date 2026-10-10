@@ -27,8 +27,8 @@ NMF_MAX_ITER = 500
 RANDOM_STATE = 42
 
 # Clustering & Similarity Configuration
-DEFAULT_SIMILARITY_THRESHOLD = 0.25  # Minimum TF-IDF cosine similarity to be considered related
-DEFAULT_DISTANCE_THRESHOLD = 0.75    # Agglomerative clustering distance threshold (1 - similarity)
+DEFAULT_SIMILARITY_THRESHOLD = 0.20  # Minimum TF-IDF cosine similarity to be considered related
+DEFAULT_DISTANCE_THRESHOLD = 0.88    # Agglomerative clustering distance threshold (1 - similarity, calibrated for news corpus)
 CLUSTERING_LINKAGE = "average"       # Options: 'average', 'complete', 'single'
 
 # Summarization Configuration

@@ -33,6 +33,41 @@ def load_dataset(
     return df
 
 
+COLUMN_SYNONYMS = {
+    "title": ["title", "headline", "headlines", "heading", "head", "name", "subject", "article_title"],
+    "text": ["text", "content", "body", "article", "story", "description", "news", "articles", "full_text", "article_text", "news_text"],
+    "source": ["source", "publisher", "publication", "outlet", "author", "agency", "site"],
+    "published_date": ["published_date", "date", "time", "timestamp", "datetime", "pub_date", "publish_date"],
+    "event_id": ["event_id", "event", "cluster", "label", "target", "category"]
+}
+
+
+def auto_map_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """Automatically detect and standardize common column name variations.
+
+    Returns:
+        (mapped_dataframe, dict_of_mappings_applied)
+    """
+    if df is None or df.empty:
+        return df, {}
+
+    df_copy = df.copy()
+    col_map = {}
+    lower_cols = {str(col).lower().strip(): col for col in df_copy.columns}
+
+    for standard_col, synonyms in COLUMN_SYNONYMS.items():
+        if standard_col not in df_copy.columns:
+            for syn in synonyms:
+                if syn in lower_cols:
+                    original_name = lower_cols[syn]
+                    col_map[original_name] = standard_col
+                    break
+
+    if col_map:
+        df_copy = df_copy.rename(columns=col_map)
+    return df_copy, col_map
+
+
 def validate_dataset(df: pd.DataFrame) -> Tuple[bool, list]:
     """Validate that the dataset contains mandatory columns and is non-empty.
 

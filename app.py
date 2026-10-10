@@ -10,7 +10,14 @@ import streamlit as st
 import matplotlib.pyplot as plt
 
 import config
-from src.data_loader import load_dataset, validate_dataset, clean_dataset, get_dataset_summary
+from src.data_loader import (
+    load_dataset,
+    validate_dataset,
+    clean_dataset,
+    get_dataset_summary,
+    auto_map_columns,
+    COLUMN_SYNONYMS
+)
 from src.preprocessing import preprocess_dataframe
 from src.topic_modeling import TopicModeler
 from src.similarity import ArticleSimilarity
@@ -213,21 +220,93 @@ elif page == "📤 Upload Dataset":
             ftype = "csv" if uploaded_file.name.endswith(".csv") else "json"
             try:
                 raw_df = load_dataset(uploaded_file, file_type=ftype)
-                is_valid, errors = validate_dataset(raw_df)
+                st.success(f"Successfully loaded file: **{uploaded_file.name}** ({len(raw_df)} rows, {len(raw_df.columns)} columns)")
 
-                if not is_valid:
-                    st.error("Validation Error:\n" + "\n".join(errors))
-                else:
-                    st.success(f"Successfully loaded {len(raw_df)} rows!")
-                    st.subheader("Raw Data Preview")
-                    st.dataframe(raw_df.head(5), use_container_width=True)
+                st.subheader("📋 Dataset Preview")
+                st.dataframe(raw_df.head(5), use_container_width=True)
 
-                    if st.button("🧹 Clean and Process Uploaded Dataset"):
-                        cleaned_df, clean_stats = clean_dataset(raw_df)
-                        st.session_state["df_clean"] = cleaned_df
-                        with st.spinner("Executing NLP Pipeline..."):
-                            _run_nlp_pipeline(cleaned_df)
-                        st.success(f"Processing Complete! Cleaned articles: {clean_stats['final_rows']} (Filtered {clean_stats['missing_filtered']} empty, {clean_stats['duplicates_removed']} duplicates)")
+                st.markdown("### 🔀 Column Mapping & Schema Matching")
+                st.caption("Select which columns in your dataset represent the article headline, text body, and optional metadata.")
+
+                all_cols = list(raw_df.columns)
+
+                # Intelligent default detection helper
+                def find_default_col(candidates, default_val=0):
+                    for idx, c in enumerate(all_cols):
+                        c_lower = str(c).lower().strip()
+                        if any(cand in c_lower for cand in candidates):
+                            return idx
+                    return default_val
+
+                default_title_idx = find_default_col(["title", "headline", "heading", "name"], 0)
+                default_text_idx = find_default_col(["text", "content", "body", "article", "story", "description", "news"], min(1, len(all_cols) - 1))
+
+                c_map1, c_map2 = st.columns(2)
+                with c_map1:
+                    selected_title = st.selectbox(
+                        "📌 Select Headline / Title Column (Required):",
+                        options=all_cols,
+                        index=default_title_idx,
+                        key="map_title_col"
+                    )
+                with c_map2:
+                    selected_text = st.selectbox(
+                        "📄 Select Article Body / Text Column (Required):",
+                        options=all_cols,
+                        index=default_text_idx,
+                        key="map_text_col"
+                    )
+
+                c_map3, c_map4 = st.columns(2)
+                optional_col_choices = ["(None - Auto assign)"] + all_cols
+                default_src_idx = find_default_col(["source", "publisher", "outlet", "author"], -1) + 1
+                default_date_idx = find_default_col(["date", "time", "timestamp"], -1) + 1
+
+                with c_map3:
+                    selected_source = st.selectbox(
+                        "🏢 Source Publication Column (Optional):",
+                        options=optional_col_choices,
+                        index=default_src_idx if default_src_idx < len(optional_col_choices) else 0,
+                        key="map_source_col"
+                    )
+                with c_map4:
+                    selected_date = st.selectbox(
+                        "📅 Publication Date Column (Optional):",
+                        options=optional_col_choices,
+                        index=default_date_idx if default_date_idx < len(optional_col_choices) else 0,
+                        key="map_date_col"
+                    )
+
+                if st.button("🚀 Process & Ingest Uploaded Dataset", type="primary"):
+                    if selected_title == selected_text:
+                        st.error("Title column and Text column cannot be the same! Please map different columns.")
+                    else:
+                        # Build mapped dataframe
+                        mapped_df = raw_df.copy()
+                        rename_dict = {
+                            selected_title: "title",
+                            selected_text: "text"
+                        }
+                        if selected_source != "(None - Auto assign)":
+                            rename_dict[selected_source] = "source"
+                        if selected_date != "(None - Auto assign)":
+                            rename_dict[selected_date] = "published_date"
+
+                        mapped_df = mapped_df.rename(columns=rename_dict)
+
+                        is_valid, errors = validate_dataset(mapped_df)
+                        if not is_valid:
+                            st.error("Validation Error:\n" + "\n".join(errors))
+                        else:
+                            cleaned_df, clean_stats = clean_dataset(mapped_df)
+                            st.session_state["df_clean"] = cleaned_df
+                            with st.spinner("Executing End-to-End NLP Pipeline..."):
+                                _run_nlp_pipeline(cleaned_df)
+                            st.success(
+                                f"✅ Processing Complete! Cleaned articles: {clean_stats['final_rows']} "
+                                f"(Filtered {clean_stats['missing_filtered']} empty/invalid rows, {clean_stats['duplicates_removed']} duplicates)."
+                            )
+                            st.info("Head over to **🧹 Preprocessing Pipeline**, **🧠 Topic Modeling**, or **🔍 Event Discovery** in the sidebar to inspect the results!")
             except Exception as e:
                 st.error(f"Error parsing file: {e}")
 

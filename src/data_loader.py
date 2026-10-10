@@ -149,8 +149,100 @@ def clean_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     else:
         cleaned["published_date"] = cleaned["published_date"].fillna("Unknown Date")
 
+    # Ensure source_dataset exists if multi-dataset ingestion was performed
+    if "source_dataset" not in cleaned.columns:
+        cleaned["source_dataset"] = "Primary Dataset"
+    else:
+        cleaned["source_dataset"] = cleaned["source_dataset"].fillna("Primary Dataset")
+
     stats["final_rows"] = len(cleaned)
     return cleaned, stats
+
+
+def combine_multiple_datasets(
+    files: List[Any],
+    file_names: Optional[List[str]] = None
+) -> Tuple[pd.DataFrame, List[Dict[str, Any]], Dict[str, Any]]:
+    """Ingest, validate, and combine multiple news CSV files into a unified collection.
+
+    Cross-dataset articles are pooled together into one unified collection,
+    while tracking dataset provenance.
+
+    Args:
+        files: List of file paths, file-like buffers, or UploadedFile instances.
+        file_names: Optional custom names for each file.
+
+    Returns:
+        (combined_cleaned_df, file_reports_list, aggregation_stats_dict)
+    """
+    valid_dfs = []
+    file_reports = []
+    total_raw_rows = 0
+
+    for idx, f in enumerate(files):
+        name = getattr(f, "name", None) or (
+            file_names[idx] if file_names and idx < len(file_names) else f"dataset_{idx+1}.csv"
+        )
+        report = {
+            "filename": name,
+            "status": "pending",
+            "raw_rows": 0,
+            "valid_rows": 0,
+            "error": None,
+            "mappings": {}
+        }
+
+        try:
+            if hasattr(f, "seek"):
+                f.seek(0)
+            raw = load_dataset(f, file_type="csv")
+            report["raw_rows"] = len(raw)
+            total_raw_rows += len(raw)
+
+            # Auto-map column synonyms (e.g. headline->title, content->text)
+            mapped_df, col_mappings = auto_map_columns(raw)
+            is_valid, errors = validate_dataset(mapped_df)
+
+            if not is_valid:
+                report["status"] = "invalid"
+                report["error"] = "; ".join(errors)
+                file_reports.append(report)
+                continue
+
+            mapped_df["source_dataset"] = name
+            valid_dfs.append(mapped_df)
+            report["status"] = "valid"
+            report["valid_rows"] = len(mapped_df)
+            report["mappings"] = col_mappings
+
+        except Exception as exc:
+            report["status"] = "error"
+            report["error"] = f"Failed to parse CSV: {str(exc)}"
+
+        file_reports.append(report)
+
+    if not valid_dfs:
+        empty_df = pd.DataFrame(columns=["article_id", "title", "text", "source", "published_date", "source_dataset"])
+        stats = {
+            "total_files": len(files),
+            "valid_files": 0,
+            "total_raw_rows": 0,
+            "missing_filtered": 0,
+            "duplicates_removed": 0,
+            "final_rows": 0
+        }
+        return empty_df, file_reports, stats
+
+    # Combine into single unified DataFrame
+    combined_raw = pd.concat(valid_dfs, ignore_index=True)
+
+    # Clean combined collection (filters empty rows and cross-dataset duplicate articles)
+    cleaned_df, clean_stats = clean_dataset(combined_raw)
+    clean_stats["total_files"] = len(files)
+    clean_stats["valid_files"] = len(valid_dfs)
+    clean_stats["total_raw_rows"] = total_raw_rows
+
+    return cleaned_df, file_reports, clean_stats
 
 
 def get_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:
@@ -160,6 +252,7 @@ def get_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:
             "total_articles": 0,
             "avg_word_count": 0,
             "sources_count": 0,
+            "datasets_count": 0,
             "has_event_labels": False
         }
 
@@ -171,5 +264,7 @@ def get_dataset_summary(df: pd.DataFrame) -> Dict[str, Any]:
         "min_word_count": int(word_counts.min()),
         "max_word_count": int(word_counts.max()),
         "unique_sources": int(df["source"].nunique()) if "source" in df.columns else 1,
+        "unique_datasets": int(df["source_dataset"].nunique()) if "source_dataset" in df.columns else 1,
         "has_event_labels": "event_id" in df.columns and df["event_id"].notna().any()
     }
+

@@ -35,3 +35,10 @@ Desktop.ini
 # Scratch and checkpoints
 .ipynb_checkpoints/
 scratch/
+
+# Large archives and temporary downloads
+*.zip
+*.tar.gz
+*.rar
+*.7z
+

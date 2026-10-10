@@ -57,6 +57,43 @@ class TestClustering(unittest.TestCase):
         summary = clusterer.get_cluster_summary()
         self.assertEqual(len(summary), 3)
 
+    def test_multi_dataset_clustering_and_export(self):
+        """Test clustering with dataset provenance, cohesion calculation, and CSV export."""
+        source_datasets = [
+            "feed_reuters.csv",
+            "feed_bbc.csv",
+            "feed_reuters.csv",
+            "feed_tech.csv",
+            "feed_sports1.csv",
+            "feed_sports2.csv"
+        ]
+        clusterer = EventClusterer(distance_threshold=0.85)
+        labels = clusterer.fit_predict(
+            self.texts,
+            titles=self.titles,
+            source_datasets=source_datasets
+        )
+        self.assertEqual(len(labels), 6)
+
+        # Test cluster summaries contain dataset provenance
+        summary = clusterer.get_cluster_summary()
+        self.assertEqual(len(summary), 3)
+
+        for c in summary:
+            self.assertTrue(c["is_cross_dataset"], "Expected cross-dataset event grouping.")
+            self.assertEqual(len(c["unique_datasets"]), 2)
+            self.assertIn("avg_similarity", c)
+            self.assertIn("cohesion_level", c)
+
+        # Test export to dataframe for CSV download
+        df_export = clusterer.export_to_dataframe()
+        self.assertEqual(len(df_export), 3)
+        self.assertIn("Cluster_ID", df_export.columns)
+        self.assertIn("Source_Datasets", df_export.columns)
+        self.assertIn("Cohesion_Level", df_export.columns)
+        self.assertIn("Extractive_Summary", df_export.columns)
+
 
 if __name__ == "__main__":
     unittest.main()
+

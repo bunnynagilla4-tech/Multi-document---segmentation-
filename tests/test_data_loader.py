@@ -5,7 +5,14 @@ from pathlib import Path
 import pandas as pd
 import io
 
-from src.data_loader import load_dataset, validate_dataset, clean_dataset, get_dataset_summary
+from src.data_loader import (
+    load_dataset,
+    validate_dataset,
+    clean_dataset,
+    get_dataset_summary,
+    combine_multiple_datasets,
+    auto_map_columns
+)
 import config
 
 
@@ -78,6 +85,42 @@ class TestDataLoader(unittest.TestCase):
         self.assertTrue(summary["has_event_labels"])
         self.assertGreater(summary["avg_word_count"], 0)
 
+    def test_combine_multiple_datasets_success(self):
+        """Test reading and combining multiple CSV buffers with cross-dataset deduplication."""
+        csv1 = io.StringIO("title,text,source\nFlood in City,Water levels rose rapidly in suburbs.,News Daily\nQuantum Advance,Scientists built 1000 qubits.,Tech Wire\n")
+        csv2 = io.StringIO("headline,content,source\nFlood in City,Water levels rose rapidly in suburbs.,City Press\nCricket Victory,India won the finals in Melbourne.,Sports News\n")
+
+        # csv2 has a duplicate text with csv1 ("Water levels rose rapidly in suburbs.")
+        # and has synonyms 'headline' and 'content' instead of 'title' and 'text'
+        combined, reports, stats = combine_multiple_datasets([csv1, csv2], file_names=["reuters.csv", "bbc.csv"])
+
+        self.assertEqual(len(reports), 2)
+        self.assertEqual(reports[0]["status"], "valid")
+        self.assertEqual(reports[1]["status"], "valid")
+        self.assertEqual(stats["total_files"], 2)
+        self.assertEqual(stats["valid_files"], 2)
+
+        # 4 total rows in raw -> 1 cross-dataset duplicate removed -> 3 unique articles
+        self.assertEqual(stats["duplicates_removed"], 1)
+        self.assertEqual(len(combined), 3)
+        self.assertIn("source_dataset", combined.columns)
+        self.assertEqual(set(combined["source_dataset"]), {"reuters.csv", "bbc.csv"})
+
+    def test_combine_multiple_datasets_with_invalid_file(self):
+        """Test that invalid CSV files are caught, reported, and skipped while valid files succeed."""
+        valid_csv = io.StringIO("title,text\nValid Article,This is a valid news article text.\n")
+        invalid_csv = io.StringIO("id,random_column\n1,No required text columns here\n")
+
+        combined, reports, stats = combine_multiple_datasets([valid_csv, invalid_csv], file_names=["valid.csv", "invalid.csv"])
+
+        self.assertEqual(len(reports), 2)
+        self.assertEqual(reports[0]["status"], "valid")
+        self.assertEqual(reports[1]["status"], "invalid")
+        self.assertIsNotNone(reports[1]["error"])
+        self.assertEqual(len(combined), 1)
+        self.assertEqual(stats["valid_files"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
+

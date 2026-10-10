@@ -77,3 +77,8 @@ class ArticleSimilarity:
         dist = (dist + dist.T) / 2.0
         np.fill_diagonal(dist, 0.0)
         return dist
+
+    def get_similarity_matrix(self) -> np.ndarray:
+        """Return the computed symmetric cosine similarity matrix."""
+        return self.similarity_matrix
+

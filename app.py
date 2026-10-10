@@ -16,6 +16,7 @@ from src.data_loader import (
     clean_dataset,
     get_dataset_summary,
     auto_map_columns,
+    combine_multiple_datasets,
     COLUMN_SYNONYMS
 )
 from src.preprocessing import preprocess_dataframe
@@ -79,6 +80,16 @@ st.markdown("""
         color: #0369a1;
         margin-right: 6px;
     }
+    .dataset-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        background-color: #f3e8ff;
+        color: #7e22ce;
+        margin-right: 4px;
+    }
     .provenance-box {
         background: #f1f5f9;
         border-left: 4px solid #3b82f6;
@@ -107,7 +118,7 @@ def init_session():
 
 
 def _run_nlp_pipeline(df: pd.DataFrame):
-    """Run full NLP pipeline: Preprocessing, Topic Modeling, and Event Clustering."""
+    """Run full NLP pipeline across all articles: Preprocessing, Topic Modeling, Event Clustering, and Summarization."""
     benchmark = PerformanceBenchmark()
 
     # Stage 1: Preprocessing
@@ -127,16 +138,30 @@ def _run_nlp_pipeline(df: pd.DataFrame):
     benchmark.end_stage("topic_modeling")
     st.session_state["topic_modeler"] = modeler
 
-    # Stage 3: Similarity & Clustering
+    # Stage 3: Similarity & Multi-Dataset Event Clustering
     benchmark.start_stage("clustering")
     clusterer = EventClusterer(distance_threshold=config.DEFAULT_DISTANCE_THRESHOLD)
     cluster_labels = clusterer.fit_predict(
         df_proc["processed_text"].tolist(),
         titles=df_proc["title"].tolist(),
-        article_ids=df_proc["article_id"].tolist()
+        article_ids=df_proc["article_id"].tolist(),
+        source_datasets=df_proc["source_dataset"].tolist() if "source_dataset" in df_proc.columns else None,
+        sources=df_proc["source"].tolist() if "source" in df_proc.columns else None
     )
     df_proc["cluster_id"] = cluster_labels
     benchmark.end_stage("clustering")
+
+    # Stage 4: Automatic Multi-Document Cluster Summarization
+    benchmark.start_stage("summarization")
+    ext_sum = ExtractiveSummarizer()
+    abs_sum = AbstractiveSummarizer()
+    clusterer.generate_all_summaries(
+        df_proc,
+        extractive_engine=ext_sum,
+        abstractive_engine=abs_sum,
+        num_sentences=config.DEFAULT_EXTRACTIVE_SENTENCES
+    )
+    benchmark.end_stage("summarization")
 
     st.session_state["clusterer"] = clusterer
     st.session_state["clusters"] = clusterer.get_cluster_summary()
@@ -212,103 +237,151 @@ elif page == "📤 Upload Dataset":
     st.markdown("<div class='main-title'>Dataset Ingestion & Management</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-title'>Upload your own news articles or reload the built-in benchmark dataset</div>", unsafe_allow_html=True)
 
-    tab_upload, tab_sample = st.tabs(["📁 Upload File (CSV / JSON)", "📦 Built-in Benchmark Data"])
+    tab_upload, tab_sample = st.tabs(["📁 Upload File(s) (Single or Multiple CSVs)", "📦 Built-in Benchmark Data"])
 
     with tab_upload:
-        uploaded_file = st.file_uploader("Upload CSV or JSON file", type=["csv", "json"])
-        if uploaded_file is not None:
-            ftype = "csv" if uploaded_file.name.endswith(".csv") else "json"
-            try:
-                raw_df = load_dataset(uploaded_file, file_type=ftype)
-                st.success(f"Successfully loaded file: **{uploaded_file.name}** ({len(raw_df)} rows, {len(raw_df.columns)} columns)")
+        uploaded_files = st.file_uploader(
+            "Upload One or Multiple CSV / JSON files",
+            type=["csv", "json"],
+            accept_multiple_files=True
+        )
 
-                st.subheader("📋 Dataset Preview")
-                st.dataframe(raw_df.head(5), use_container_width=True)
+        if uploaded_files:
+            if len(uploaded_files) == 1:
+                uploaded_file = uploaded_files[0]
+                ftype = "csv" if uploaded_file.name.endswith(".csv") else "json"
+                try:
+                    raw_df = load_dataset(uploaded_file, file_type=ftype)
+                    st.success(f"Successfully loaded file: **{uploaded_file.name}** ({len(raw_df)} rows, {len(raw_df.columns)} columns)")
 
-                st.markdown("### 🔀 Column Mapping & Schema Matching")
-                st.caption("Select which columns in your dataset represent the article headline, text body, and optional metadata.")
+                    st.subheader("📋 Dataset Preview")
+                    st.dataframe(raw_df.head(5), use_container_width=True)
 
-                all_cols = list(raw_df.columns)
+                    st.markdown("### 🔀 Column Mapping & Schema Matching")
+                    st.caption("Select which columns in your dataset represent the article headline, text body, and optional metadata.")
 
-                # Intelligent default detection helper
-                def find_default_col(candidates, default_val=0):
-                    for idx, c in enumerate(all_cols):
-                        c_lower = str(c).lower().strip()
-                        if any(cand in c_lower for cand in candidates):
-                            return idx
-                    return default_val
+                    all_cols = list(raw_df.columns)
 
-                default_title_idx = find_default_col(["title", "headline", "heading", "name"], 0)
-                default_text_idx = find_default_col(["text", "content", "body", "article", "story", "description", "news"], min(1, len(all_cols) - 1))
+                    # Intelligent default detection helper
+                    def find_default_col(candidates, default_val=0):
+                        for idx, c in enumerate(all_cols):
+                            c_lower = str(c).lower().strip()
+                            if any(cand in c_lower for cand in candidates):
+                                return idx
+                        return default_val
 
-                c_map1, c_map2 = st.columns(2)
-                with c_map1:
-                    selected_title = st.selectbox(
-                        "📌 Select Headline / Title Column (Required):",
-                        options=all_cols,
-                        index=default_title_idx,
-                        key="map_title_col"
-                    )
-                with c_map2:
-                    selected_text = st.selectbox(
-                        "📄 Select Article Body / Text Column (Required):",
-                        options=all_cols,
-                        index=default_text_idx,
-                        key="map_text_col"
-                    )
+                    default_title_idx = find_default_col(["title", "headline", "heading", "name"], 0)
+                    default_text_idx = find_default_col(["text", "content", "body", "article", "story", "description", "news"], min(1, len(all_cols) - 1))
 
-                c_map3, c_map4 = st.columns(2)
-                optional_col_choices = ["(None - Auto assign)"] + all_cols
-                default_src_idx = find_default_col(["source", "publisher", "outlet", "author"], -1) + 1
-                default_date_idx = find_default_col(["date", "time", "timestamp"], -1) + 1
+                    c_map1, c_map2 = st.columns(2)
+                    with c_map1:
+                        selected_title = st.selectbox(
+                            "📌 Select Headline / Title Column (Required):",
+                            options=all_cols,
+                            index=default_title_idx,
+                            key="map_title_col"
+                        )
+                    with c_map2:
+                        selected_text = st.selectbox(
+                            "📄 Select Article Body / Text Column (Required):",
+                            options=all_cols,
+                            index=default_text_idx,
+                            key="map_text_col"
+                        )
 
-                with c_map3:
-                    selected_source = st.selectbox(
-                        "🏢 Source Publication Column (Optional):",
-                        options=optional_col_choices,
-                        index=default_src_idx if default_src_idx < len(optional_col_choices) else 0,
-                        key="map_source_col"
-                    )
-                with c_map4:
-                    selected_date = st.selectbox(
-                        "📅 Publication Date Column (Optional):",
-                        options=optional_col_choices,
-                        index=default_date_idx if default_date_idx < len(optional_col_choices) else 0,
-                        key="map_date_col"
-                    )
+                    c_map3, c_map4 = st.columns(2)
+                    optional_col_choices = ["(None - Auto assign)"] + all_cols
+                    default_src_idx = find_default_col(["source", "publisher", "outlet", "author"], -1) + 1
+                    default_date_idx = find_default_col(["date", "time", "timestamp"], -1) + 1
 
-                if st.button("🚀 Process & Ingest Uploaded Dataset", type="primary"):
-                    if selected_title == selected_text:
-                        st.error("Title column and Text column cannot be the same! Please map different columns.")
-                    else:
-                        # Build mapped dataframe
-                        mapped_df = raw_df.copy()
-                        rename_dict = {
-                            selected_title: "title",
-                            selected_text: "text"
-                        }
-                        if selected_source != "(None - Auto assign)":
-                            rename_dict[selected_source] = "source"
-                        if selected_date != "(None - Auto assign)":
-                            rename_dict[selected_date] = "published_date"
+                    with c_map3:
+                        selected_source = st.selectbox(
+                            "🏢 Source Publication Column (Optional):",
+                            options=optional_col_choices,
+                            index=default_src_idx if default_src_idx < len(optional_col_choices) else 0,
+                            key="map_source_col"
+                        )
+                    with c_map4:
+                        selected_date = st.selectbox(
+                            "📅 Publication Date Column (Optional):",
+                            options=optional_col_choices,
+                            index=default_date_idx if default_date_idx < len(optional_col_choices) else 0,
+                            key="map_date_col"
+                        )
 
-                        mapped_df = mapped_df.rename(columns=rename_dict)
-
-                        is_valid, errors = validate_dataset(mapped_df)
-                        if not is_valid:
-                            st.error("Validation Error:\n" + "\n".join(errors))
+                    if st.button("🚀 Process & Ingest Uploaded Dataset", type="primary"):
+                        if selected_title == selected_text:
+                            st.error("Title column and Text column cannot be the same! Please map different columns.")
                         else:
-                            cleaned_df, clean_stats = clean_dataset(mapped_df)
-                            st.session_state["df_clean"] = cleaned_df
-                            with st.spinner("Executing End-to-End NLP Pipeline..."):
-                                _run_nlp_pipeline(cleaned_df)
-                            st.success(
-                                f"✅ Processing Complete! Cleaned articles: {clean_stats['final_rows']} "
-                                f"(Filtered {clean_stats['missing_filtered']} empty/invalid rows, {clean_stats['duplicates_removed']} duplicates)."
-                            )
-                            st.info("Head over to **🧹 Preprocessing Pipeline**, **🧠 Topic Modeling**, or **🔍 Event Discovery** in the sidebar to inspect the results!")
-            except Exception as e:
-                st.error(f"Error parsing file: {e}")
+                            mapped_df = raw_df.copy()
+                            rename_dict = {
+                                selected_title: "title",
+                                selected_text: "text"
+                            }
+                            if selected_source != "(None - Auto assign)":
+                                rename_dict[selected_source] = "source"
+                            if selected_date != "(None - Auto assign)":
+                                rename_dict[selected_date] = "published_date"
+
+                            mapped_df = mapped_df.rename(columns=rename_dict)
+                            mapped_df["source_dataset"] = uploaded_file.name
+
+                            is_valid, errors = validate_dataset(mapped_df)
+                            if not is_valid:
+                                st.error("Validation Error:\n" + "\n".join(errors))
+                            else:
+                                cleaned_df, clean_stats = clean_dataset(mapped_df)
+                                st.session_state["df_clean"] = cleaned_df
+                                with st.spinner("Executing End-to-End NLP Pipeline..."):
+                                    _run_nlp_pipeline(cleaned_df)
+                                st.success(
+                                    f"✅ Processing Complete! Cleaned articles: {clean_stats['final_rows']} "
+                                    f"(Filtered {clean_stats['missing_filtered']} empty/invalid rows, {clean_stats['duplicates_removed']} duplicates)."
+                                )
+                                st.info("Head over to **🔍 Event Discovery** or **📝 Summarization Studio** in the sidebar to inspect the results!")
+                except Exception as e:
+                    st.error(f"Error parsing file: {e}")
+
+            else:
+                # Multiple Files Uploaded
+                st.info(f"📂 **{len(uploaded_files)} datasets uploaded.** NewsLens will combine all articles into one unified collection and discover cross-dataset news events.")
+
+                file_summary_rows = []
+                for f in uploaded_files:
+                    file_summary_rows.append({
+                        "File Name": f.name,
+                        "File Size": f"{round(f.size / 1024, 1)} KB"
+                    })
+                st.table(pd.DataFrame(file_summary_rows))
+
+                if st.button("🚀 Combine, Deduplicate & Cluster Across All Uploaded Datasets", type="primary"):
+                    with st.spinner(f"Ingesting and merging {len(uploaded_files)} datasets..."):
+                        combined_cleaned, file_reports, agg_stats = combine_multiple_datasets(uploaded_files)
+
+                    # Diagnostic report per file
+                    for rep in file_reports:
+                        if rep["status"] == "valid":
+                            st.success(f"✔️ **{rep['filename']}**: Ingested {rep['valid_rows']} valid articles.")
+                        elif rep["status"] == "invalid":
+                            st.warning(f"⚠️ **{rep['filename']}**: Skipped due to invalid schema: {rep['error']}")
+                        else:
+                            st.error(f"❌ **{rep['filename']}**: Error: {rep['error']}")
+
+                    if combined_cleaned.empty:
+                        st.error("No valid articles could be extracted from the uploaded files. Please check file contents.")
+                    else:
+                        st.session_state["df_clean"] = combined_cleaned
+                        with st.spinner("Executing End-to-End Multi-Dataset NLP Pipeline..."):
+                            _run_nlp_pipeline(combined_cleaned)
+
+                        st.success(
+                            f"🎉 **Multi-Dataset Ingestion & Clustering Complete!**\n\n"
+                            f"* Total Raw Articles Ingested: **{agg_stats.get('total_raw_rows', 0)}**\n"
+                            f"* Cross-Dataset Duplicates Removed: **{agg_stats.get('duplicates_removed', 0)}**\n"
+                            f"* Empty / Invalid Rows Filtered: **{agg_stats.get('missing_filtered', 0)}**\n"
+                            f"* Unified Article Collection: **{agg_stats.get('final_rows', 0)} articles** across **{agg_stats.get('valid_files', 0)} datasets**."
+                        )
+                        st.info("Head over to **🔍 Event Discovery** in the sidebar to inspect the candidate events and download the summaries CSV!")
 
     with tab_sample:
         st.write("Reload the verified 12-article multi-event news dataset:")
@@ -430,14 +503,95 @@ elif page == "🔍 Event Discovery":
     if not clusters:
         st.warning("No clusters available. Please load and process a dataset.")
     else:
-        st.write(f"Identified **{len(clusters)}** distinct candidate news events:")
+        clusterer = st.session_state.get("clusterer")
+        df_clean = st.session_state.get("df_clean", pd.DataFrame())
+
+        # Executive Metrics
+        total_clusters = len(clusters)
+        cross_dataset_count = sum(1 for c in clusters if c.get("is_cross_dataset"))
+        unrelated_count = sum(1 for c in clusters if c.get("is_unrelated"))
+        coherent_count = total_clusters - unrelated_count
+
+        ec1, ec2, ec3, ec4 = st.columns(4)
+        ec1.metric("Discovered Events", total_clusters)
+        ec2.metric("Cross-Dataset Events", cross_dataset_count)
+        ec3.metric("Coherent Events", coherent_count)
+        ec4.metric("Outlier / Low Cohesion", unrelated_count)
+
+        # Download Buttons Bar
+        st.markdown("### 📥 Download Results & Summaries")
+        col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            if clusterer is not None:
+                summary_df = clusterer.export_to_dataframe()
+                csv_data = summary_df.to_csv(index=False)
+                st.download_button(
+                    "📊 Download Event Clusters & Summaries (CSV)",
+                    data=csv_data,
+                    file_name="newslens_event_clusters_and_summaries.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+        with col_dl2:
+            if clusterer is not None and not df_clean.empty:
+                art_mapping_df = clusterer.export_article_mapping_dataframe(df_clean)
+                art_csv = art_mapping_df.to_csv(index=False)
+                st.download_button(
+                    "📰 Download Article-to-Cluster Mapping (CSV)",
+                    data=art_csv,
+                    file_name="newslens_article_cluster_mapping.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+        st.markdown("---")
+        st.write(f"Displaying **{len(clusters)}** candidate news events discovered across all ingested articles:")
 
         for c in clusters:
-            with st.expander(f"📌 {c['label']} ({c['article_count']} articles)", expanded=True):
-                st.markdown(f"**Representative Headline:** {c['representative_title']}")
+            # Badges
+            badges_html = ""
+            if c.get("is_cross_dataset"):
+                badges_html += "<span class='dataset-badge'>🌐 Multi-Dataset Event</span> "
+            if c.get("is_unrelated"):
+                badges_html += "<span style='background:#fee2e2;color:#b91c1c;padding:3px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;'>⚠️ Low Cohesion / Outlier</span>"
+            else:
+                badges_html += "<span style='background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-size:0.78rem;font-weight:600;'>✅ Coherent Event</span>"
+
+            exp_label = f"📌 Event {c['event_id']}: {c['representative_title']} ({c['article_count']} articles)"
+            with st.expander(exp_label, expanded=True):
+                st.markdown(f"**Event Status:** {badges_html}", unsafe_allow_html=True)
+                if c.get("cohesion_note"):
+                    if c.get("is_unrelated"):
+                        st.warning(c["cohesion_note"])
+                    else:
+                        st.info(c["cohesion_note"])
+
+                m1, m2, m3, m4 = st.columns(4)
+                m1.text(f"Articles: {c['article_count']}")
+                m2.text(f"Avg Similarity: {c.get('avg_similarity', 1.0)}")
+                m3.text(f"Cohesion: {c.get('cohesion_level', 'N/A')}")
+                datasets_str = ", ".join(c.get("unique_datasets", []))
+                m4.text(f"Datasets: {datasets_str}")
+
+                st.markdown("#### 📄 Combined Cluster Summary")
+                if c.get("summary_status", "").startswith("failed"):
+                    st.error(f"❌ Summarization Failed: {c.get('extractive_summary')}")
+                else:
+                    st.success(c.get("extractive_summary", "No summary available."))
+
+                if c.get("abstractive_summary") and not c.get("abstractive_summary", "").startswith("N/A"):
+                    st.markdown("##### 🧠 Abstractive Synthesis")
+                    st.info(c.get("abstractive_summary"))
+
+                st.markdown("#### 📰 Articles in this Event")
                 c_indices = c["article_indices"]
                 sub_df = st.session_state["df_clean"].iloc[c_indices]
-                st.dataframe(sub_df[["article_id", "title", "source", "published_date"]], use_container_width=True)
+                cols_to_show = ["article_id", "title", "source"]
+                if "source_dataset" in sub_df.columns:
+                    cols_to_show.append("source_dataset")
+                if "published_date" in sub_df.columns:
+                    cols_to_show.append("published_date")
+                st.dataframe(sub_df[cols_to_show], use_container_width=True)
 
 # ==========================================
 # PAGE 6: SUMMARIZATION STUDIO
